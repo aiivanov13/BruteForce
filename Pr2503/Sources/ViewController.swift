@@ -2,8 +2,10 @@ import UIKit
 import SnapKit
 
 class ViewController: UIViewController {
-    private let globalQueue = DispatchQueue(label: "", attributes: [.concurrent])
+    private var isStarted = false
+    private let globalQueue = DispatchQueue.global(qos: .background)
     private let mainQueue = DispatchQueue.main
+    private var workItem: DispatchWorkItem?
 
     // MARK: - Outlets
     private lazy var spinner: UIActivityIndicatorView = {
@@ -33,13 +35,11 @@ class ViewController: UIViewController {
 
     private lazy var passwordTextField: UITextField = {
         let textField = UITextField()
-        textField.isSecureTextEntry = true
         textField.backgroundColor = .systemGray6
         textField.placeholder = "Password"
         textField.textAlignment = .center
         textField.font = UIFont.monospacedSystemFont(ofSize: 18, weight: .regular)
         textField.layer.cornerRadius = 8
-        textField.isUserInteractionEnabled = false
         textField.translatesAutoresizingMaskIntoConstraints = false
         return textField
     }()
@@ -56,6 +56,7 @@ class ViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        passwordTextField.delegate = self
         setupView()
         setupHierarchy()
         setupLayout()
@@ -96,29 +97,39 @@ class ViewController: UIViewController {
 
         bruteForceButton.snp.makeConstraints { make in
             make.centerX.equalTo(view)
-            make.centerY.equalTo(view).multipliedBy(1.5)
+            make.top.equalTo(randomButton.snp.bottom).offset(157)
         }
 
         spinner.snp.makeConstraints { make in
             make.centerX.equalTo(view)
-            make.centerY.equalTo(view).dividedBy(1.3)
+            make.top.equalTo(randomButton.snp.bottom).offset(60)
         }
     }
 
     // MARK: - Actions
 
     @objc private func bruteForceButtonTapped() {
+        isStarted.toggle()
         let text = passwordTextField.text ?? ""
 
         if text != "" {
-            passwordLabel.isHidden = true
-            spinner.startAnimating()
+            if isStarted {
+                spinner.startAnimating()
+                bruteForceButton.setTitle("Stop", for: .normal)
 
-            globalQueue.async { [weak self] in
-                self?.bruteForce(passwordToUnlock: text)
+                let newWorkItem = DispatchWorkItem { [weak self] in
+                    self?.bruteForce(passwordToUnlock: text)
+                }
+                workItem = newWorkItem
+                globalQueue.async(execute: newWorkItem)
+            } else {
+                workItem?.cancel()
+                spinner.stopAnimating()
+                bruteForceButton.setTitle("Brute Force", for: .normal)
             }
         } else {
             passwordLabel.text = "Введите пароль"
+            isStarted = false
         }
     }
 
@@ -141,14 +152,26 @@ extension ViewController {
         var password: String = ""
 
         while password != passwordToUnlock {
+            if workItem?.isCancelled ?? false {
+                break
+            }
             password = generateBruteForce(password, fromArray: allowedCharacters)
+            
+            mainQueue.async { [weak self] in
+                self?.passwordLabel.text = password
+            }
         }
 
         mainQueue.async { [weak self] in
-            self?.spinner.stopAnimating()
-            self?.passwordLabel.text = "Пароль \(password) взломан"
-            self?.passwordLabel.isHidden = false
-            self?.passwordTextField.isSecureTextEntry = false
+            if self?.workItem?.isCancelled ?? false {
+                self?.passwordLabel.text = "Пароль \(passwordToUnlock) не взломан"
+            } else {
+                self?.isStarted = false
+                self?.bruteForceButton.setTitle("Brute Force", for: .normal)
+                self?.spinner.stopAnimating()
+                self?.passwordLabel.text = "Пароль \(password) взломан"
+                self?.passwordTextField.isSecureTextEntry = false
+            }
         }
     }
 
