@@ -8,6 +8,7 @@ class ViewController: UIViewController {
     private var workItem: DispatchWorkItem?
 
     // MARK: - Outlets
+    
     private lazy var spinner: UIActivityIndicatorView = {
         let spinner = UIActivityIndicatorView(style: .large)
         spinner.translatesAutoresizingMaskIntoConstraints = false
