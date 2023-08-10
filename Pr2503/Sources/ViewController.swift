@@ -124,6 +124,7 @@ class ViewController: UIViewController {
 
     @objc private func randomButtonTapped() {
         var password = ""
+        passwordTextField.isSecureTextEntry = true
 
         for _ in 0..<Int.random(in: 3...4) {
             password.append(String(String().printable.randomElement() ?? Character("")))
